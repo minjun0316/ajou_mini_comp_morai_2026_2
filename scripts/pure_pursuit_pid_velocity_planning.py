@@ -50,6 +50,7 @@ class pure_pursuit :
         self.is_status = False
         self.is_global_path = False
         self.traffic_light_states = {}
+        self.active_traffic_stop_id = None
 
         # 신호등별 ID, 정지 구역, 통과 신호 비트를 launch 파일에서 설정합니다.
         # 목록이 비어 있으면 신호등 제어가 비활성화되어 기존 주행에 영향을 주지 않습니다.
@@ -67,7 +68,7 @@ class pure_pursuit :
         self.min_lfd = 5
         self.max_lfd = 30
         self.lfd_gain = 0.78
-        self.target_velocity = 30.0
+        self.target_velocity = 25.0
 
         # --- 조향 정책 반영을 위한 파라미터 추가 ---
         self.max_steer_deg = 40.0  # 차량의 최대 조향각 (40도)
@@ -116,7 +117,7 @@ class pure_pursuit :
                     self.ctrl_cmd_msg.brake = -output
 
                 # 현재 정지 구역에 대응하는 신호등의 허용 신호가 아니면 정지합니다.
-                stop_zone = self.get_current_traffic_stop_zone()
+                stop_zone = self.get_traffic_control_zone()
                 if self.should_stop_for_traffic_light(stop_zone):
                     self.ctrl_cmd_msg.accel = 0.0
                     self.ctrl_cmd_msg.brake = 1.0
@@ -186,6 +187,20 @@ class pure_pursuit :
 
         return None
 
+    def get_traffic_control_zone(self):
+        current_zone = self.get_current_traffic_stop_zone()
+        if current_zone is not None:
+            return current_zone
+
+        # 빨간불에 한 번 정지한 뒤에는 차량이 정지 좌표 밖으로 조금 밀려도
+        # 해당 신호가 허용 상태로 바뀔 때까지 같은 신호등 제어를 유지합니다.
+        if self.active_traffic_stop_id is not None:
+            for stop_zone in self.traffic_stop_zones:
+                if str(stop_zone.get('id', '')) == self.active_traffic_stop_id:
+                    return stop_zone
+
+        return None
+
     def is_near_traffic_stop_zone(self):
         vehicle_x = self.status_msg.position.x
         vehicle_y = self.status_msg.position.y
@@ -221,10 +236,16 @@ class pure_pursuit :
         # 유효한 상태인지 먼저 검사합니다. 미수신/default 상태에서는 안전 정지합니다.
         traffic_light_status = self.traffic_light_states.get(stop_zone['id'], -1)
         if traffic_light_status < 0:
+            self.active_traffic_stop_id = stop_zone['id']
             return True
 
         is_allowed_signal_on = (traffic_light_status & stop_zone['allowed_signal']) != 0
-        return not is_allowed_signal_on
+        if is_allowed_signal_on:
+            self.active_traffic_stop_id = None
+            return False
+
+        self.active_traffic_stop_id = stop_zone['id']
+        return True
         
     def global_path_callback(self,msg):
         self.global_path = msg
@@ -351,7 +372,7 @@ class velocityPlanning:
             out_vel_plan.append(v_max)
 
         for i in range(len(gloabl_path.poses) - point_num, len(gloabl_path.poses)-10):
-            out_vel_plan.append(30.0 / 3.6)
+            out_vel_plan.append(25.0 / 3.6)
 
         for i in range(len(gloabl_path.poses) - 10, len(gloabl_path.poses)):
             out_vel_plan.append(0)

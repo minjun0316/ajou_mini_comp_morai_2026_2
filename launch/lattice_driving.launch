@@ -21,7 +21,8 @@
             y_max: -16.0
             z_min: 28.0
             z_max: 29.0
-            allowed_signal: 16
+            # 직진(16) 또는 좌회전(32) 중 하나가 켜지면 통과: 16 | 32 = 48
+            allowed_signal: 48
         </rosparam>
         <param name="traffic_approach_distance" value="5.0"/>
         <param name="traffic_approach_velocity" value="10.0"/>
