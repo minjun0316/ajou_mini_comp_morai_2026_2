@@ -79,7 +79,7 @@ class pure_pursuit :
         self.min_lfd = 5
         self.max_lfd = 30
         self.lfd_gain = 0.78
-        self.target_velocity = 22.0
+        self.target_velocity = 24.0
 
         # --- 조향 정책 반영을 위한 파라미터 추가 ---
         self.max_steer_deg = 40.0  # 차량의 최대 조향각 (40도)
