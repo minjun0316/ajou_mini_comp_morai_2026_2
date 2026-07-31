@@ -60,8 +60,8 @@ class pure_pursuit :
         self.traffic_stop_zones = rospy.get_param('~traffic_stop_zones', [])
         self.traffic_approach_distance = rospy.get_param('~traffic_approach_distance', 5.0)
         self.traffic_approach_velocity = rospy.get_param('~traffic_approach_velocity', 10.0)
-        self.final_slow_zone = rospy.get_param('~final_slow_zone', {})
-        self.final_slow_velocity = rospy.get_param('~final_slow_velocity', 10.0)
+        self.slow_zones = rospy.get_param('~slow_zones', [])
+        self.slow_zone_velocity = rospy.get_param('~slow_zone_velocity', 10.0)
         self.bicycle_stop_zone = rospy.get_param('~bicycle_stop_zone', {})
         self.bicycle_stop_hold_duration = rospy.get_param('~bicycle_stop_hold_duration', 5.0)
         self.bicycle_stop_velocity_threshold = rospy.get_param(
@@ -111,15 +111,15 @@ class pure_pursuit :
                         self.traffic_approach_velocity
                     )
 
-                # 마지막 구간에서는 완전히 정지하지 않고 10km/h로 서행합니다.
-                if self.is_in_final_slow_zone():
+                # 지정된 서행 구간에서는 완전히 정지하지 않고 10km/h로 주행합니다.
+                if self.is_in_slow_zone():
                     self.target_velocity = min(
                         self.target_velocity,
-                        self.final_slow_velocity
+                        self.slow_zone_velocity
                     )
                     rospy.logwarn_throttle(
                         1.0,
-                        "Final slow zone: target velocity %.1f km/h",
+                        "Slow zone: target velocity %.1f km/h",
                         self.target_velocity
                     )
 
@@ -335,26 +335,31 @@ class pure_pursuit :
         rospy.loginfo("Bicycle stop completed: resuming driving")
         return False
 
-    def is_in_final_slow_zone(self):
-        if not self.final_slow_zone:
-            return False
-
-        try:
-            x_min = float(self.final_slow_zone['x_min'])
-            x_max = float(self.final_slow_zone['x_max'])
-            y_min = float(self.final_slow_zone['y_min'])
-            y_max = float(self.final_slow_zone['y_max'])
-        except (KeyError, TypeError, ValueError):
-            rospy.logwarn_throttle(
-                5.0,
-                "Invalid final_slow_zone: %s",
-                self.final_slow_zone
-            )
+    def is_in_slow_zone(self):
+        if not self.slow_zones:
             return False
 
         vehicle_x = self.status_msg.position.x
         vehicle_y = self.status_msg.position.y
-        return x_min <= vehicle_x <= x_max and y_min <= vehicle_y <= y_max
+
+        for slow_zone in self.slow_zones:
+            try:
+                x_min = float(slow_zone['x_min'])
+                x_max = float(slow_zone['x_max'])
+                y_min = float(slow_zone['y_min'])
+                y_max = float(slow_zone['y_max'])
+            except (KeyError, TypeError, ValueError):
+                rospy.logwarn_throttle(
+                    5.0,
+                    "Invalid slow_zones entry: %s",
+                    slow_zone
+                )
+                continue
+
+            if x_min <= vehicle_x <= x_max and y_min <= vehicle_y <= y_max:
+                return True
+
+        return False
         
     def global_path_callback(self,msg):
         self.global_path = msg
