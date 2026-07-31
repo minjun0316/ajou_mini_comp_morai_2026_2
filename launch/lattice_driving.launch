@@ -23,6 +23,8 @@
             z_max: 29.0
             allowed_signal: 16
         </rosparam>
+        <param name="traffic_approach_distance" value="5.0"/>
+        <param name="traffic_approach_velocity" value="10.0"/>
     </node>
 
     <node pkg="beginner_tutorials" type="mgeo_pub.py" name="mgeo_pub"  />

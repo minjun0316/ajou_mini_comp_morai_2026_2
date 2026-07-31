@@ -54,6 +54,8 @@ class pure_pursuit :
         # 신호등별 ID, 정지 구역, 통과 신호 비트를 launch 파일에서 설정합니다.
         # 목록이 비어 있으면 신호등 제어가 비활성화되어 기존 주행에 영향을 주지 않습니다.
         self.traffic_stop_zones = rospy.get_param('~traffic_stop_zones', [])
+        self.traffic_approach_distance = rospy.get_param('~traffic_approach_distance', 5.0)
+        self.traffic_approach_velocity = rospy.get_param('~traffic_approach_velocity', 10.0)
 
         self.is_look_forward_point = False
 
@@ -65,7 +67,7 @@ class pure_pursuit :
         self.min_lfd = 5
         self.max_lfd = 30
         self.lfd_gain = 0.78
-        self.target_velocity = 40.0
+        self.target_velocity = 30.0
 
         # --- 조향 정책 반영을 위한 파라미터 추가 ---
         self.max_steer_deg = 40.0  # 차량의 최대 조향각 (40도)
@@ -89,7 +91,13 @@ class pure_pursuit :
 
                 self.current_waypoint = self.get_current_waypoint(self.status_msg,self.global_path)
                 self.target_velocity = self.velocity_list[self.current_waypoint]*3.6
-                
+
+                # 신호등 정지 구역 5m 전부터 목표속도를 낮춰 급정지를 방지합니다.
+                if self.is_near_traffic_stop_zone():
+                    self.target_velocity = min(
+                        self.target_velocity,
+                        self.traffic_approach_velocity
+                    )
 
                 front_steer = self.calc_pure_pursuit()
                 if self.is_look_forward_point :
@@ -177,6 +185,33 @@ class pure_pursuit :
                 return stop_zone
 
         return None
+
+    def is_near_traffic_stop_zone(self):
+        vehicle_x = self.status_msg.position.x
+        vehicle_y = self.status_msg.position.y
+        vehicle_z = self.status_msg.position.z
+
+        for stop_zone in self.traffic_stop_zones:
+            try:
+                x_min = float(stop_zone['x_min'])
+                x_max = float(stop_zone['x_max'])
+                y_min = float(stop_zone['y_min'])
+                y_max = float(stop_zone['y_max'])
+                z_min = float(stop_zone['z_min'])
+                z_max = float(stop_zone['z_max'])
+            except (KeyError, TypeError, ValueError):
+                continue
+
+            # 차량과 직육면체 정지 구역 사이의 최단거리를 계산합니다.
+            dx = max(x_min - vehicle_x, 0.0, vehicle_x - x_max)
+            dy = max(y_min - vehicle_y, 0.0, vehicle_y - y_max)
+            dz = max(z_min - vehicle_z, 0.0, vehicle_z - z_max)
+            distance = sqrt(dx * dx + dy * dy + dz * dz)
+
+            if distance <= self.traffic_approach_distance:
+                return True
+
+        return False
 
     def should_stop_for_traffic_light(self, stop_zone):
         if stop_zone is None:
@@ -316,7 +351,7 @@ class velocityPlanning:
             out_vel_plan.append(v_max)
 
         for i in range(len(gloabl_path.poses) - point_num, len(gloabl_path.poses)-10):
-            out_vel_plan.append(30)
+            out_vel_plan.append(30.0 / 3.6)
 
         for i in range(len(gloabl_path.poses) - 10, len(gloabl_path.poses)):
             out_vel_plan.append(0)
