@@ -61,7 +61,7 @@ class pure_pursuit :
         self.traffic_approach_distance = rospy.get_param('~traffic_approach_distance', 5.0)
         self.traffic_approach_velocity = rospy.get_param('~traffic_approach_velocity', 10.0)
         self.slow_zones = rospy.get_param('~slow_zones', [])
-        self.slow_zone_velocity = rospy.get_param('~slow_zone_velocity', 10.0)
+        self.slow_zone_velocity = rospy.get_param('~slow_zone_velocity', 7.0)
         self.bicycle_stop_zone = rospy.get_param('~bicycle_stop_zone', {})
         self.bicycle_stop_hold_duration = rospy.get_param('~bicycle_stop_hold_duration', 5.0)
         self.bicycle_stop_velocity_threshold = rospy.get_param(
@@ -111,7 +111,7 @@ class pure_pursuit :
                         self.traffic_approach_velocity
                     )
 
-                # 지정된 서행 구간에서는 완전히 정지하지 않고 10km/h로 주행합니다.
+                # 지정된 서행 구간에서는 완전히 정지하지 않고 7km/h로 주행합니다.
                 if self.is_in_slow_zone():
                     self.target_velocity = min(
                         self.target_velocity,
