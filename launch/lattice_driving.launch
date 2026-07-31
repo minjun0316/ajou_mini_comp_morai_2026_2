@@ -26,9 +26,9 @@
         </rosparam>
         <param name="traffic_approach_distance" value="5.0"/>
         <param name="traffic_approach_velocity" value="10.0"/>
-        <!-- x가 -62 이하이고 y/z가 기준 위치 ±1m이면 자전거 통과를 위해 5초 정차 -->
+        <!-- x가 -59 이하이고 y/z가 기준 위치 ±1m이면 자전거 통과를 위해 5초 정차 -->
         <rosparam param="bicycle_stop_zone">
-          x_trigger: -62.0
+          x_trigger: -59.0
           y_min: -18.24423599243164
           y_max: -16.24423599243164
           z_min: 27.7694149017334
