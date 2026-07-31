@@ -79,7 +79,7 @@ class pure_pursuit :
         self.min_lfd = 5
         self.max_lfd = 30
         self.lfd_gain = 0.78
-        self.target_velocity = 25.0
+        self.target_velocity = 22.0
 
         # --- 조향 정책 반영을 위한 파라미터 추가 ---
         self.max_steer_deg = 40.0  # 차량의 최대 조향각 (40도)
@@ -485,11 +485,10 @@ class velocityPlanning:
                 v_max = self.car_max_speed
             out_vel_plan.append(v_max)
 
-        for i in range(len(gloabl_path.poses) - point_num, len(gloabl_path.poses)-10):
-            out_vel_plan.append(25.0 / 3.6)
-
-        for i in range(len(gloabl_path.poses) - 10, len(gloabl_path.poses)):
-            out_vel_plan.append(0)
+        # 곡률 계산 범위 밖인 경로 끝부분도 설정된 기본속도로 주행합니다.
+        # 마지막 10개 waypoint를 0km/h로 만들던 종점 강제 정지는 사용하지 않습니다.
+        for i in range(len(gloabl_path.poses) - point_num, len(gloabl_path.poses)):
+            out_vel_plan.append(self.car_max_speed)
 
         return out_vel_plan
 
