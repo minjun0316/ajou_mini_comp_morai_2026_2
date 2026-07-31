@@ -51,12 +51,14 @@ class pure_pursuit :
         self.is_global_path = False
         self.traffic_light_states = {}
         self.active_traffic_stop_id = None
+        self.final_stop_latched = False
 
         # 신호등별 ID, 정지 구역, 통과 신호 비트를 launch 파일에서 설정합니다.
         # 목록이 비어 있으면 신호등 제어가 비활성화되어 기존 주행에 영향을 주지 않습니다.
         self.traffic_stop_zones = rospy.get_param('~traffic_stop_zones', [])
         self.traffic_approach_distance = rospy.get_param('~traffic_approach_distance', 5.0)
         self.traffic_approach_velocity = rospy.get_param('~traffic_approach_velocity', 10.0)
+        self.final_stop_zone = rospy.get_param('~final_stop_zone', {})
 
         self.is_look_forward_point = False
 
@@ -128,6 +130,15 @@ class pure_pursuit :
                         self.traffic_light_states.get(stop_zone['id'], -1),
                         stop_zone['allowed_signal']
                     )
+
+                # 마지막 정차 구역에 한 번 진입하면 노드가 종료될 때까지 정차를 유지합니다.
+                if self.is_in_final_stop_zone():
+                    self.final_stop_latched = True
+
+                if self.final_stop_latched:
+                    self.ctrl_cmd_msg.accel = 0.0
+                    self.ctrl_cmd_msg.brake = 1.0
+                    rospy.logwarn_throttle(1.0, "Final stop latched: holding brake")
 
                 #TODO: (8) 제어입력 메세지 Publish
                 # print(f"Target Vel: {self.target_velocity:.1f} | Final Steer: {front_steer:.4f}") # 디버깅용 출력 변경 가능
@@ -246,6 +257,27 @@ class pure_pursuit :
 
         self.active_traffic_stop_id = stop_zone['id']
         return True
+
+    def is_in_final_stop_zone(self):
+        if not self.final_stop_zone:
+            return False
+
+        try:
+            x_min = float(self.final_stop_zone['x_min'])
+            x_max = float(self.final_stop_zone['x_max'])
+            y_min = float(self.final_stop_zone['y_min'])
+            y_max = float(self.final_stop_zone['y_max'])
+        except (KeyError, TypeError, ValueError):
+            rospy.logwarn_throttle(
+                5.0,
+                "Invalid final_stop_zone: %s",
+                self.final_stop_zone
+            )
+            return False
+
+        vehicle_x = self.status_msg.position.x
+        vehicle_y = self.status_msg.position.y
+        return x_min <= vehicle_x <= x_max and y_min <= vehicle_y <= y_max
         
     def global_path_callback(self,msg):
         self.global_path = msg

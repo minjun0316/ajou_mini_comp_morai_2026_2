@@ -26,6 +26,13 @@
         </rosparam>
         <param name="traffic_approach_distance" value="5.0"/>
         <param name="traffic_approach_velocity" value="10.0"/>
+        <!-- 최종 위치의 x/y 각각 3m 범위. 한 번 진입하면 계속 정차합니다. -->
+        <rosparam param="final_stop_zone">
+          x_min: -95.11051940917969
+          x_max: -89.11051940917969
+          y_min: 37.153663635253906
+          y_max: 43.153663635253906
+        </rosparam>
     </node>
 
     <node pkg="beginner_tutorials" type="mgeo_pub.py" name="mgeo_pub"  />
