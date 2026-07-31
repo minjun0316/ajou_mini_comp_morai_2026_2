@@ -37,13 +37,14 @@
         <param name="bicycle_stop_hold_duration" value="5.0"/>
         <!-- 0.1m/s 이하가 된 시점부터 실제 정차 시간을 계산합니다. -->
         <param name="bicycle_stop_velocity_threshold" value="0.1"/>
-        <!-- 최종 위치의 x/y 각각 3m 범위. 한 번 진입하면 계속 정차합니다. -->
-        <rosparam param="final_stop_zone">
+        <!-- 최종 위치의 x/y 각각 3m 범위에서는 완전 정지 대신 10km/h로 서행합니다. -->
+        <rosparam param="final_slow_zone">
           x_min: -95.11051940917969
           x_max: -89.11051940917969
           y_min: 37.153663635253906
           y_max: 43.153663635253906
         </rosparam>
+        <param name="final_slow_velocity" value="10.0"/>
     </node>
 
     <node pkg="beginner_tutorials" type="mgeo_pub.py" name="mgeo_pub"  />
