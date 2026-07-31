@@ -8,7 +8,7 @@ import rospkg
 from math import cos,sin,pi,sqrt,pow,atan2
 from geometry_msgs.msg import Point,PoseWithCovarianceStamped
 from nav_msgs.msg import Odometry,Path
-from morai_msgs.msg import CtrlCmd,EgoVehicleStatus
+from morai_msgs.msg import CtrlCmd,EgoVehicleStatus,GetTrafficLightStatus
 import numpy as np
 import tf
 from tf.transformations import euler_from_quaternion,quaternion_from_euler
@@ -38,7 +38,8 @@ class pure_pursuit :
         rospy.Subscriber("/lattice_path", Path, self.path_callback)
         
         rospy.Subscriber("/odom", Odometry, self.odom_callback)
-        rospy.Subscriber("/Ego_topic",EgoVehicleStatus, self.status_callback) 
+        rospy.Subscriber("/Ego_topic",EgoVehicleStatus, self.status_callback)
+        rospy.Subscriber("/GetTrafficLightStatus", GetTrafficLightStatus, self.traffic_light_callback)
         self.ctrl_cmd_pub = rospy.Publisher('ctrl_cmd',CtrlCmd, queue_size=1)
 
         self.ctrl_cmd_msg = CtrlCmd()
@@ -48,6 +49,15 @@ class pure_pursuit :
         self.is_odom = False 
         self.is_status = False
         self.is_global_path = False
+        self.is_traffic_light = False
+        self.traffic_light_status = -1
+
+        # 신호등 정지 지점은 launch 파일에서 아래 형식으로 설정합니다.
+        # [{x: 0.0, y: 0.0, radius: 10.0}, ...]
+        # 목록이 비어 있으면 신호등 제어가 비활성화되어 기존 주행에 영향을 주지 않습니다.
+        self.traffic_stop_points = rospy.get_param('~traffic_stop_points', [])
+        self.default_traffic_stop_radius = rospy.get_param('~traffic_stop_radius', 10.0)
+        self.left_arrow_bit = 32
 
         self.is_look_forward_point = False
 
@@ -101,6 +111,16 @@ class pure_pursuit :
                     self.ctrl_cmd_msg.accel = 0.0
                     self.ctrl_cmd_msg.brake = -output
 
+                # 신호등 정지 구역에서는 좌회전 화살표가 켜진 경우에만 주행합니다.
+                if self.should_stop_for_traffic_light():
+                    self.ctrl_cmd_msg.accel = 0.0
+                    self.ctrl_cmd_msg.brake = 1.0
+                    rospy.logwarn_throttle(
+                        1.0,
+                        "Traffic stop: left arrow is not lit (status=%s)",
+                        self.traffic_light_status
+                    )
+
                 #TODO: (8) 제어입력 메세지 Publish
                 # print(f"Target Vel: {self.target_velocity:.1f} | Final Steer: {front_steer:.4f}") # 디버깅용 출력 변경 가능
                 self.ctrl_cmd_pub.publish(self.ctrl_cmd_msg)
@@ -121,7 +141,46 @@ class pure_pursuit :
 
     def status_callback(self,msg): ## Vehicl Status Subscriber 
         self.is_status=True
-        self.status_msg=msg    
+        self.status_msg=msg
+
+    def traffic_light_callback(self, msg):
+        self.traffic_light_status = msg.trafficLightStatus
+        self.is_traffic_light = True
+
+    def is_in_traffic_stop_zone(self):
+        vehicle_x = self.status_msg.position.x
+        vehicle_y = self.status_msg.position.y
+
+        for stop_point in self.traffic_stop_points:
+            try:
+                stop_x = float(stop_point['x'])
+                stop_y = float(stop_point['y'])
+                radius = float(stop_point.get('radius', self.default_traffic_stop_radius))
+            except (KeyError, TypeError, ValueError):
+                rospy.logwarn_throttle(
+                    5.0,
+                    "Invalid traffic_stop_points entry: %s",
+                    stop_point
+                )
+                continue
+
+            distance = sqrt(pow(vehicle_x - stop_x, 2) + pow(vehicle_y - stop_y, 2))
+            if distance <= radius:
+                return True
+
+        return False
+
+    def should_stop_for_traffic_light(self):
+        if not self.traffic_stop_points or not self.is_in_traffic_stop_zone():
+            return False
+
+        # -1(default)은 Python 비트 연산상 모든 비트가 켜진 것처럼 보이므로
+        # 유효한 상태인지 먼저 검사합니다. 미수신/default 상태에서는 안전 정지합니다.
+        if not self.is_traffic_light or self.traffic_light_status < 0:
+            return True
+
+        is_left_arrow_on = (self.traffic_light_status & self.left_arrow_bit) != 0
+        return not is_left_arrow_on
         
     def global_path_callback(self,msg):
         self.global_path = msg
