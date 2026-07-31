@@ -26,10 +26,17 @@
         </rosparam>
         <param name="traffic_approach_distance" value="5.0"/>
         <param name="traffic_approach_velocity" value="10.0"/>
-        <!-- 두 번째 신호등 출발 후 자전거 통과 대기: 4초 주행, 5초 정차 -->
-        <param name="timed_stop_signal_id" value="C1256W000074"/>
-        <param name="timed_stop_drive_duration" value="4.0"/>
-        <param name="timed_stop_hold_duration" value="5.0"/>
+        <!-- x가 -62 이하이고 y/z가 기준 위치 ±1m이면 자전거 통과를 위해 5초 정차 -->
+        <rosparam param="bicycle_stop_zone">
+          x_trigger: -62.0
+          y_min: -18.24423599243164
+          y_max: -16.24423599243164
+          z_min: 27.7694149017334
+          z_max: 29.7694149017334
+        </rosparam>
+        <param name="bicycle_stop_hold_duration" value="5.0"/>
+        <!-- 0.1m/s 이하가 된 시점부터 실제 정차 시간을 계산합니다. -->
+        <param name="bicycle_stop_velocity_threshold" value="0.1"/>
         <!-- 최종 위치의 x/y 각각 3m 범위. 한 번 진입하면 계속 정차합니다. -->
         <rosparam param="final_stop_zone">
           x_min: -95.11051940917969
