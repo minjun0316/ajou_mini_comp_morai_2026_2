@@ -4,10 +4,25 @@
     <node pkg="beginner_tutorials" type="local_path_pub.py" name="path_pub" />    
     <node pkg="beginner_tutorials" type="lattice_planner.py" name="lattice_planner" output="screen"/>
     <node pkg="beginner_tutorials" type="pure_pursuit_pid_velocity_planning.py" name="pure_pursuit_pid_velocity_planning" output="screen">
-        <!-- 신호등 정지 지점을 알게 되면 아래 목록에 추가하세요.
-             예: [{x: 100.0, y: 200.0, radius: 10.0}] -->
-        <rosparam param="traffic_stop_points">[]</rosparam>
-        <param name="traffic_stop_radius" value="10.0"/>
+        <!-- allowed_signal: Green=16, Green_with_left_arrow=32 -->
+        <rosparam param="traffic_stop_zones">
+          - id: "C1256W000081"
+            x_min: 1.0
+            x_max: 2.0
+            y_min: -45.0
+            y_max: -42.0
+            z_min: 28.0
+            z_max: 29.0
+            allowed_signal: 32
+          - id: "C1256W000074"
+            x_min: -45.0
+            x_max: -40.0
+            y_min: -17.0
+            y_max: -16.0
+            z_min: 28.0
+            z_max: 29.0
+            allowed_signal: 16
+        </rosparam>
     </node>
 
     <node pkg="beginner_tutorials" type="mgeo_pub.py" name="mgeo_pub"  />

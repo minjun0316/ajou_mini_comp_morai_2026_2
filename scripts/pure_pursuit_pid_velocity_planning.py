@@ -49,15 +49,11 @@ class pure_pursuit :
         self.is_odom = False 
         self.is_status = False
         self.is_global_path = False
-        self.is_traffic_light = False
-        self.traffic_light_status = -1
+        self.traffic_light_states = {}
 
-        # 신호등 정지 지점은 launch 파일에서 아래 형식으로 설정합니다.
-        # [{x: 0.0, y: 0.0, radius: 10.0}, ...]
+        # 신호등별 ID, 정지 구역, 통과 신호 비트를 launch 파일에서 설정합니다.
         # 목록이 비어 있으면 신호등 제어가 비활성화되어 기존 주행에 영향을 주지 않습니다.
-        self.traffic_stop_points = rospy.get_param('~traffic_stop_points', [])
-        self.default_traffic_stop_radius = rospy.get_param('~traffic_stop_radius', 10.0)
-        self.left_arrow_bit = 32
+        self.traffic_stop_zones = rospy.get_param('~traffic_stop_zones', [])
 
         self.is_look_forward_point = False
 
@@ -111,14 +107,17 @@ class pure_pursuit :
                     self.ctrl_cmd_msg.accel = 0.0
                     self.ctrl_cmd_msg.brake = -output
 
-                # 신호등 정지 구역에서는 좌회전 화살표가 켜진 경우에만 주행합니다.
-                if self.should_stop_for_traffic_light():
+                # 현재 정지 구역에 대응하는 신호등의 허용 신호가 아니면 정지합니다.
+                stop_zone = self.get_current_traffic_stop_zone()
+                if self.should_stop_for_traffic_light(stop_zone):
                     self.ctrl_cmd_msg.accel = 0.0
                     self.ctrl_cmd_msg.brake = 1.0
                     rospy.logwarn_throttle(
                         1.0,
-                        "Traffic stop: left arrow is not lit (status=%s)",
-                        self.traffic_light_status
+                        "Traffic stop: id=%s, status=%s, allowed_bit=%s",
+                        stop_zone['id'],
+                        self.traffic_light_states.get(stop_zone['id'], -1),
+                        stop_zone['allowed_signal']
                     )
 
                 #TODO: (8) 제어입력 메세지 Publish
@@ -144,43 +143,53 @@ class pure_pursuit :
         self.status_msg=msg
 
     def traffic_light_callback(self, msg):
-        self.traffic_light_status = msg.trafficLightStatus
-        self.is_traffic_light = True
+        self.traffic_light_states[msg.trafficLightIndex] = msg.trafficLightStatus
 
-    def is_in_traffic_stop_zone(self):
+    def get_current_traffic_stop_zone(self):
         vehicle_x = self.status_msg.position.x
         vehicle_y = self.status_msg.position.y
+        vehicle_z = self.status_msg.position.z
 
-        for stop_point in self.traffic_stop_points:
+        for stop_zone in self.traffic_stop_zones:
             try:
-                stop_x = float(stop_point['x'])
-                stop_y = float(stop_point['y'])
-                radius = float(stop_point.get('radius', self.default_traffic_stop_radius))
+                stop_zone['id'] = str(stop_zone['id'])
+                stop_zone['allowed_signal'] = int(stop_zone['allowed_signal'])
+                x_min = float(stop_zone['x_min'])
+                x_max = float(stop_zone['x_max'])
+                y_min = float(stop_zone['y_min'])
+                y_max = float(stop_zone['y_max'])
+                z_min = float(stop_zone['z_min'])
+                z_max = float(stop_zone['z_max'])
             except (KeyError, TypeError, ValueError):
                 rospy.logwarn_throttle(
                     5.0,
-                    "Invalid traffic_stop_points entry: %s",
-                    stop_point
+                    "Invalid traffic_stop_zones entry: %s",
+                    stop_zone
                 )
                 continue
 
-            distance = sqrt(pow(vehicle_x - stop_x, 2) + pow(vehicle_y - stop_y, 2))
-            if distance <= radius:
-                return True
+            is_in_zone = (
+                x_min <= vehicle_x <= x_max
+                and y_min <= vehicle_y <= y_max
+                and z_min <= vehicle_z <= z_max
+            )
+            if is_in_zone:
+                return stop_zone
 
-        return False
+        return None
 
-    def should_stop_for_traffic_light(self):
-        if not self.traffic_stop_points or not self.is_in_traffic_stop_zone():
+    def should_stop_for_traffic_light(self, stop_zone):
+        if stop_zone is None:
             return False
 
         # -1(default)은 Python 비트 연산상 모든 비트가 켜진 것처럼 보이므로
         # 유효한 상태인지 먼저 검사합니다. 미수신/default 상태에서는 안전 정지합니다.
-        if not self.is_traffic_light or self.traffic_light_status < 0:
+        traffic_light_status = self.traffic_light_states.get(stop_zone['id'], -1)
+        if traffic_light_status < 0:
             return True
 
-        is_left_arrow_on = (self.traffic_light_status & self.left_arrow_bit) != 0
-        return not is_left_arrow_on
+        is_allowed_signal_on = (traffic_light_status & stop_zone['allowed_signal']) != 0
+        return not is_allowed_signal_on
         
     def global_path_callback(self,msg):
         self.global_path = msg
