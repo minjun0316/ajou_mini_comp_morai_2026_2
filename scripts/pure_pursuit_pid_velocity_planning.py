@@ -52,6 +52,9 @@ class pure_pursuit :
         self.traffic_light_states = {}
         self.active_traffic_stop_id = None
         self.final_stop_latched = False
+        self.timed_stop_started = False
+        self.timed_stop_completed = False
+        self.timed_stop_start_time = None
 
         # 신호등별 ID, 정지 구역, 통과 신호 비트를 launch 파일에서 설정합니다.
         # 목록이 비어 있으면 신호등 제어가 비활성화되어 기존 주행에 영향을 주지 않습니다.
@@ -59,6 +62,12 @@ class pure_pursuit :
         self.traffic_approach_distance = rospy.get_param('~traffic_approach_distance', 5.0)
         self.traffic_approach_velocity = rospy.get_param('~traffic_approach_velocity', 10.0)
         self.final_stop_zone = rospy.get_param('~final_stop_zone', {})
+        self.timed_stop_signal_id = rospy.get_param(
+            '~timed_stop_signal_id',
+            'C1256W000074'
+        )
+        self.timed_stop_drive_duration = rospy.get_param('~timed_stop_drive_duration', 4.0)
+        self.timed_stop_hold_duration = rospy.get_param('~timed_stop_hold_duration', 5.0)
 
         self.is_look_forward_point = False
 
@@ -130,6 +139,12 @@ class pure_pursuit :
                         self.traffic_light_states.get(stop_zone['id'], -1),
                         stop_zone['allowed_signal']
                     )
+
+                # 두 번째 신호등 출발 후 4초 주행하고 5초 동안 정차합니다.
+                if self.should_hold_timed_stop():
+                    self.ctrl_cmd_msg.accel = 0.0
+                    self.ctrl_cmd_msg.brake = 1.0
+                    rospy.logwarn_throttle(1.0, "Bicycle timed stop: holding brake")
 
                 # 마지막 정차 구역에 한 번 진입하면 노드가 종료될 때까지 정차를 유지합니다.
                 if self.is_in_final_stop_zone():
@@ -252,11 +267,44 @@ class pure_pursuit :
 
         is_allowed_signal_on = (traffic_light_status & stop_zone['allowed_signal']) != 0
         if is_allowed_signal_on:
+            self.start_timed_stop_mission(stop_zone['id'])
             self.active_traffic_stop_id = None
             return False
 
         self.active_traffic_stop_id = stop_zone['id']
         return True
+
+    def start_timed_stop_mission(self, traffic_light_id):
+        if (
+            traffic_light_id == self.timed_stop_signal_id
+            and not self.timed_stop_started
+            and not self.timed_stop_completed
+        ):
+            self.timed_stop_started = True
+            self.timed_stop_start_time = rospy.Time.now()
+            rospy.loginfo(
+                "Bicycle timed stop started: drive %.1fs, stop %.1fs",
+                self.timed_stop_drive_duration,
+                self.timed_stop_hold_duration
+            )
+
+    def should_hold_timed_stop(self):
+        if not self.timed_stop_started or self.timed_stop_completed:
+            return False
+
+        elapsed = (rospy.Time.now() - self.timed_stop_start_time).to_sec()
+        stop_start = self.timed_stop_drive_duration
+        stop_end = stop_start + self.timed_stop_hold_duration
+
+        if elapsed < stop_start:
+            return False
+
+        if elapsed < stop_end:
+            return True
+
+        self.timed_stop_completed = True
+        rospy.loginfo("Bicycle timed stop completed: resuming driving")
+        return False
 
     def is_in_final_stop_zone(self):
         if not self.final_stop_zone:
